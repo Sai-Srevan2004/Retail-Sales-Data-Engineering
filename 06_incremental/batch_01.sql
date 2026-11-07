@@ -40,8 +40,7 @@ FROM
 )
 PATTERN='.*customers_batch_01\\.csv(\\.gz)?'
 FILE_FORMAT = (FORMAT_NAME = 'RAW.RETAIL_CSV_FORMAT')
-ON_ERROR = 'ABORT_STATEMENT'
-FORCE=TRUE;
+ON_ERROR = 'ABORT_STATEMENT';
 
 
 
@@ -85,10 +84,49 @@ FROM
 )
 PATTERN='.*sales_batch_01\\.csv(\\.gz)?'
 FILE_FORMAT = (FORMAT_NAME = 'RAW.RETAIL_CSV_FORMAT')
-ON_ERROR = 'ABORT_STATEMENT'
-FORCE=TRUE;
+ON_ERROR = 'ABORT_STATEMENT';
 
 
--- Manual processing for learning/debugging:
-CALL GOLD.PROCESS_CUSTOMER_INCREMENTAL();
-CALL GOLD.PROCESS_SALES_INCREMENTAL();
+-- =========================================================
+-- PRODUCTS
+-- =========================================================
+
+
+
+COPY INTO RAW.PRODUCTS
+(
+    product_id,
+    product_name,
+    category,
+    brand,
+    unit_price,
+    created_at,
+    updated_at,
+    is_active,
+    _source_file,
+    _loaded_at,
+    _batch_id,
+    _row_number
+)
+FROM
+(
+    SELECT
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        METADATA$FILENAME,
+        CURRENT_TIMESTAMP(),
+        'BATCH_01',
+        METADATA$FILE_ROW_NUMBER
+    FROM @RAW.RETAIL_SOURCE_STAGE
+)
+PATTERN = '.*products_batch_01\\.csv(\\.gz)?'
+FILE_FORMAT = (FORMAT_NAME = 'RAW.RETAIL_CSV_FORMAT')
+ON_ERROR = 'ABORT_STATEMENT';
+
+
