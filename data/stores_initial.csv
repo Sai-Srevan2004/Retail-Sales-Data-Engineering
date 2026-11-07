@@ -1,31 +1,31 @@
 store_id,store_name,city,state,region,store_type,opened_date
-ST001,Vijayawada - Benz Circle,Vijayawada,AP,SOUTH,HIGH_STREET,2020-01-21
-ST002,Kolkata - Park Street,Kolkata,WB,EAST,HIGH_STREET,2016-05-27
-ST003,Bhubaneswar - Saheed Nagar,Bhubaneswar,OD,EAST,HIGH_STREET,2022-02-17
-ST004,Bengaluru - Indiranagar,Bengaluru,KA,SOUTH,HIGH_STREET,2025-02-27
-ST005,Delhi - Connaught Place,Delhi,DL,NORTH,HIGH_STREET,2015-02-06
-ST006,Amritsar - Ranjit Avenue,Amritsar,PB,NORTH,MALL,2024-02-24
-ST007,Hyderabad - Banjara Hills,Hyderabad,TS,SOUTH,MALL,2024-05-16
-ST008,Chennai - T Nagar,Chennai,TN,SOUTH,HYPERMARKET,2022-11-22
-ST009,Panaji - Miramar,Panaji,GA,WEST,HIGH_STREET,2023-04-26
-ST010,Mumbai - Andheri West,Mumbai,MH,WEST,MALL,2019-11-08
-ST011,Pune - Koregaon Park,Pune,MH,WEST,HIGH_STREET,2022-06-22
-ST012,Chennai - Velachery,Chennai,TN,SOUTH,HIGH_STREET,2019-03-15
-ST013,Patna - Boring Road,Patna,BR,EAST,HYPERMARKET,2017-11-19
-ST014,Kolkata - Salt Lake,Kolkata,WB,EAST,HYPERMARKET,2024-11-11
-ST015,Kochi - Edappally,Kochi,KL,SOUTH,HIGH_STREET,2017-09-25
-ST016,Surat - Adajan,Surat,GJ,WEST,HYPERMARKET,2023-04-20
-ST017,Visakhapatnam - MVP Colony,Visakhapatnam,AP,SOUTH,HYPERMARKET,2020-06-24
-ST018,Hyderabad - Gachibowli,Hyderabad,TS,SOUTH,HIGH_STREET,2020-06-11
-ST019,Chandigarh - Sector 17,Chandigarh,CH,NORTH,WAREHOUSE_OUTLET,2015-02-28
-ST020,Delhi - Saket,Delhi,DL,NORTH,HIGH_STREET,2016-10-26
-ST021,Mumbai - Powai,Mumbai,MH,WEST,EXPRESS,2021-04-24
-ST022,Coimbatore - RS Puram,Coimbatore,TN,SOUTH,HIGH_STREET,2016-01-08
-ST023,Noida - Sector 18,Noida,UP,NORTH,MALL,2025-03-05
-ST024,Bengaluru - Whitefield,Bengaluru,KA,SOUTH,HIGH_STREET,2015-09-02
-ST025,Lucknow - Hazratganj,Lucknow,UP,NORTH,WAREHOUSE_OUTLET,2018-10-19
-ST026,Ahmedabad - Satellite,Ahmedabad,GJ,WEST,EXPRESS,2022-02-21
-ST027,Thiruvananthapuram - Technopark Road,Thiruvananthapuram,KL,SOUTH,HIGH_STREET,2017-03-11
-ST028,Nagpur - Dharampeth,Nagpur,MH,WEST,HYPERMARKET,2018-05-23
-ST029,Jaipur - Malviya Nagar,Jaipur,RJ,NORTH,MALL,2019-08-07
-ST030,Gurugram - Sector 29,Gurugram,HR,NORTH,EXPRESS,2018-05-29
+ST001,Hyderabad Retail Store 1,Hyderabad,Telangana,SOUTH,MALL,2018-01-01
+ST002,Bengaluru Retail Store 1,Bengaluru,Karnataka,SOUTH,HIGH_STREET,2018-02-17
+ST003,Chennai Retail Store 1,  Hyderabad ,Tamil Nadu,SOUTH,OUTLET,2018-04-05
+ST004,Mumbai Retail Store 1,Mumbai,Maharashtra,WEST,MALL,2018-05-22
+ST005,Pune Retail Store 1,Pune,Maharashtra,WEST,HIGH_STREET,2018-07-08
+ST006,Delhi Retail Store 1,Delhi,Delhi,NORTH,OUTLET,2018-08-24
+ST007,Jaipur Retail Store 1,Jaipur,Rajasthan,NORTH,MALL,2018-10-10
+ST008,Kolkata Retail Store 1,Kolkata,west bengal,EAST,HIGH_STREET,2018-11-26
+ST009,Bhubaneswar Retail Store 1,Bhubaneswar,Odisha,EAST,OUTLET,2019-01-12
+ST010,Bhopal Retail Store 1,Bhopal,Madhya Pradesh,CENTRAL,MALL,2019-02-28
+ST011,Hyderabad Retail Store 2,Hyderabad,Telangana,SOUTH,HIGH_STREET,2019-04-16
+ST012,Bengaluru Retail Store 2,Bengaluru,Karnataka,SOUTH,OUTLET,not-a-date
+ST013,Chennai Retail Store 2,Chennai,Tamil Nadu,SOUTH,MALL,2019-07-19
+ST014,Mumbai Retail Store 2,Mumbai,Maharashtra,WEST,HIGH_STREET,2019-09-04
+ST015,Pune Retail Store 2,Pune,Maharashtra,WEST,OUTLET,2019-10-21
+ST016,Delhi Retail Store 2,Delhi,Delhi,NORTH,MALL,2019-12-07
+ST017,Jaipur Retail Store 2,Jaipur,Rajasthan,NORTH,HIGH_STREET,2020-01-23
+ST018,Kolkata Retail Store 2,Kolkata,West Bengal,EAST,OUTLET,2020-03-10
+ST019,Bhubaneswar Retail Store 2,Bhubaneswar,Odisha,EAST,MALL,2020-04-26
+ST020,Bhopal Retail Store 2,Bhopal,Madhya Pradesh,CENTRAL, outlet ,2020-06-12
+ST021,Hyderabad Retail Store 3,Hyderabad,Telangana,SOUTH,OUTLET,2020-07-29
+ST022,Bengaluru Retail Store 3,Bengaluru,Karnataka,SOUTH,MALL,2020-09-14
+ST023,Chennai Retail Store 3,Chennai,Tamil Nadu,SOUTH,HIGH_STREET,2020-10-31
+ST024,Mumbai Retail Store 3,Mumbai,Maharashtra,WEST,OUTLET,2020-12-17
+ST025,Pune Retail Store 3,Pune,Maharashtra,WEST,MALL,2021-02-02
+ST026,Delhi Retail Store 3,Delhi,Delhi,NORTH,HIGH_STREET,2021-03-21
+ST027,Jaipur Retail Store 3,Jaipur,Rajasthan,NORTH,OUTLET,2021-05-07
+ST028,Kolkata Retail Store 3,Kolkata,West Bengal,EAST,MALL,2021-06-23
+ST029,Bhubaneswar Retail Store 3,Bhubaneswar,Odisha,EAST,HIGH_STREET,2021-08-09
+ST030,Bhopal Retail Store 3,Bhopal,Madhya Pradesh,CENTRAL,OUTLET,2021-09-25

@@ -1,7 +1,14 @@
+
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 USE SCHEMA SILVER;
 
-CREATE TABLE IF NOT EXISTS SILVER.SALES (
+
+-- ============================================================
+-- 1. CREATE SILVER SALES TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS SILVER.SALES
+(
     sale_id           STRING NOT NULL,
     sale_timestamp    TIMESTAMP_NTZ,
     customer_id       STRING,
@@ -18,144 +25,105 @@ CREATE TABLE IF NOT EXISTS SILVER.SALES (
 
 
 -- ============================================================
--- VALID SALES RECORDS
+-- 2. CLEAN AND VALIDATE RAW SALES
 -- ============================================================
 
-INSERT INTO SILVER.SALES
-(
-    sale_id,
-    sale_timestamp,
-    customer_id,
-    product_id,
-    store_id,
-    quantity,
-    unit_price,
-    discount_amount,
-    payment_method,
-    _source_file,
-    _batch_id,
-    _loaded_at
-)
-SELECT
-    sale_id,
-    sale_timestamp,
-    customer_id,
-    product_id,
-    store_id,
-    quantity,
-    unit_price,
-    discount_amount,
-    payment_method,
-    _source_file,
-    _batch_id,
-    _loaded_at
-FROM
+CREATE OR REPLACE TEMP TABLE SALES_VALIDATION AS
+
+WITH CLEANED AS
 (
     SELECT
-        NULLIF(TRIM(sale_id), '') AS sale_id,
+        NULLIF(TRIM(R.sale_id), '') AS sale_id,
 
         TRY_TO_TIMESTAMP_NTZ(
-            NULLIF(TRIM(sale_timestamp), '')
+            NULLIF(TRIM(R.sale_timestamp), '')
         ) AS sale_timestamp,
 
-        NULLIF(TRIM(customer_id), '') AS customer_id,
-
-        NULLIF(TRIM(product_id), '') AS product_id,
-
-        NULLIF(TRIM(store_id), '') AS store_id,
+        NULLIF(TRIM(R.customer_id), '') AS customer_id,
+        NULLIF(TRIM(R.product_id), '') AS product_id,
+        NULLIF(TRIM(R.store_id), '') AS store_id,
 
         TRY_TO_NUMBER(
-            NULLIF(TRIM(quantity), '')
+            NULLIF(TRIM(R.quantity), '')
         ) AS quantity,
 
         TRY_TO_NUMBER(
-            NULLIF(TRIM(unit_price), ''),
+            NULLIF(TRIM(R.unit_price), ''),
             12,
             2
         ) AS unit_price,
 
         TRY_TO_NUMBER(
-            NULLIF(TRIM(discount_amount), ''),
+            NULLIF(TRIM(R.discount_amount), ''),
             12,
             2
         ) AS discount_amount,
 
-        UPPER(NULLIF(TRIM(payment_method), '')) AS payment_method,
+        UPPER(NULLIF(TRIM(R.payment_method), '')) AS payment_method,
 
-        _source_file,
-        _batch_id,
-        _loaded_at,
+        R._source_file,
+        R._batch_id,
+        R._loaded_at,
+        R._row_number,
 
-        ROW_NUMBER() OVER (
-            PARTITION BY NULLIF(TRIM(sale_id), '')
-            ORDER BY
-                TRY_TO_TIMESTAMP_NTZ(
-                    NULLIF(TRIM(sale_timestamp), '')
-                ) DESC NULLS LAST,
-                _row_number DESC
-        ) AS rn
+        OBJECT_CONSTRUCT_KEEP_NULL(
+            'sale_id', R.sale_id,
+            'sale_timestamp', R.sale_timestamp,
+            'customer_id', R.customer_id,
+            'product_id', R.product_id,
+            'store_id', R.store_id,
+            'quantity', R.quantity,
+            'unit_price', R.unit_price,
+            'discount_amount', R.discount_amount,
+            'payment_method', R.payment_method
+        ) AS raw_record
 
-    FROM RAW.SALES
+    FROM RAW.SALES R
+)
 
-    WHERE NULLIF(TRIM(sale_id), '') IS NOT NULL
+SELECT
+    *,
 
-      AND TRY_TO_TIMESTAMP_NTZ(
-            NULLIF(TRIM(sale_timestamp), '')
-          ) IS NOT NULL
+    CASE
+        WHEN sale_id IS NULL
+            THEN 'MISSING_SALE_ID'
 
-      AND NULLIF(TRIM(customer_id), '') IS NOT NULL
+        WHEN sale_timestamp IS NULL
+            THEN 'INVALID_SALE_TIMESTAMP'
 
-      AND NULLIF(TRIM(product_id), '') IS NOT NULL
+        WHEN customer_id IS NULL
+            THEN 'MISSING_CUSTOMER_ID'
 
-      AND NULLIF(TRIM(store_id), '') IS NOT NULL
+        WHEN product_id IS NULL
+            THEN 'MISSING_PRODUCT_ID'
 
-      AND TRY_TO_NUMBER(
-            NULLIF(TRIM(quantity), '')
-          ) > 0
+        WHEN store_id IS NULL
+            THEN 'MISSING_STORE_ID'
 
-      AND TRY_TO_NUMBER(
-            NULLIF(TRIM(unit_price), ''),
-            12,
-            2
-          ) > 0
+        WHEN quantity IS NULL OR quantity <= 0
+            THEN 'INVALID_QUANTITY'
 
-      AND TRY_TO_NUMBER(
-            NULLIF(TRIM(discount_amount), ''),
-            12,
-            2
-          ) >= 0
+        WHEN unit_price IS NULL OR unit_price <= 0
+            THEN 'INVALID_UNIT_PRICE'
 
-      AND TRY_TO_NUMBER(
-            NULLIF(TRIM(discount_amount), ''),
-            12,
-            2
-          )
-          <=
-          TRY_TO_NUMBER(
-              NULLIF(TRIM(quantity), '')
-          )
-          *
-          TRY_TO_NUMBER(
-              NULLIF(TRIM(unit_price), ''),
-              12,
-              2
-          )
+        WHEN discount_amount IS NULL OR discount_amount < 0
+            THEN 'INVALID_DISCOUNT'
 
-      AND UPPER(TRIM(payment_method))
-          IN ('CASH', 'CARD', 'UPI', 'WALLET')
-) x
+        WHEN discount_amount > quantity * unit_price
+            THEN 'DISCOUNT_EXCEEDS_GROSS_AMOUNT'
 
-WHERE rn = 1
+        WHEN payment_method IS NULL
+             OR payment_method NOT IN ('CASH', 'CARD', 'UPI', 'WALLET','NET_BANKING')
+            THEN 'INVALID_PAYMENT_METHOD'
 
-  AND NOT EXISTS (
-      SELECT 1
-      FROM SILVER.SALES t
-      WHERE t.sale_id = x.sale_id
-  );
+        ELSE NULL
+    END AS rejection_reason
+
+FROM CLEANED;
 
 
 -- ============================================================
--- REJECTED SALES RECORDS
+-- 3. INSERT INVALID RECORDS INTO REJECTION TABLE
 -- ============================================================
 
 INSERT INTO SILVER.REJECTED_RECORDS
@@ -166,172 +134,199 @@ INSERT INTO SILVER.REJECTED_RECORDS
     rejection_reason,
     raw_record,
     batch_id,
-    rejected_at
+    rejected_at,
+    source_row_number
 )
+
 SELECT
-    _source_file,
-
+    S._source_file,
     'SALE',
+    S.sale_id,
+    S.rejection_reason,
+    S.raw_record,
+    S._batch_id,
+    CURRENT_TIMESTAMP(),
+    S._row_number
 
-    NULLIF(TRIM(sale_id), ''),
+FROM SALES_VALIDATION S
 
-    CASE
-        WHEN NULLIF(TRIM(sale_id), '') IS NULL
-            THEN 'MISSING_SALE_ID'
+WHERE S.rejection_reason IS NOT NULL
 
-        WHEN TRY_TO_TIMESTAMP_NTZ(
-                NULLIF(TRIM(sale_timestamp), '')
-             ) IS NULL
-            THEN 'INVALID_SALE_TIMESTAMP'
+AND NOT EXISTS
+(
+    SELECT 1
+    FROM SILVER.REJECTED_RECORDS R
+    WHERE R.source_file = S._source_file
+      AND R.entity_name = 'SALE'
+      AND R.batch_id = S._batch_id
+      AND R.source_row_number = S._row_number
+);
 
-        WHEN NULLIF(TRIM(customer_id), '') IS NULL
-            THEN 'MISSING_CUSTOMER_ID'
 
-        WHEN NULLIF(TRIM(product_id), '') IS NULL
-            THEN 'MISSING_PRODUCT_ID'
+-- ============================================================
+-- 4. GLOBAL DEDUPLICATION
+-- ============================================================
 
-        WHEN NULLIF(TRIM(store_id), '') IS NULL
-            THEN 'MISSING_STORE_ID'
+CREATE OR REPLACE TEMP TABLE SALES_DEDUPLICATED AS
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(quantity), '')
-             ) IS NULL
-            THEN 'INVALID_QUANTITY'
+SELECT
+    *,
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(quantity), '')
-             ) <= 0
-            THEN 'INVALID_QUANTITY'
+    ROW_NUMBER() OVER
+    (
+        PARTITION BY sale_id
+        ORDER BY
+            _loaded_at DESC NULLS LAST,
+            _source_file DESC,
+            _row_number DESC
+    ) AS rn
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(unit_price), ''),
-                12,
-                2
-             ) IS NULL
-            THEN 'INVALID_UNIT_PRICE'
+FROM SALES_VALIDATION
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(unit_price), ''),
-                12,
-                2
-             ) <= 0
-            THEN 'INVALID_UNIT_PRICE'
+WHERE rejection_reason IS NULL;
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(discount_amount), ''),
-                12,
-                2
-             ) IS NULL
-            THEN 'INVALID_DISCOUNT'
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(discount_amount), ''),
-                12,
-                2
-             ) < 0
-            THEN 'INVALID_DISCOUNT'
+-- ============================================================
+-- 5. INSERT DUPLICATE SALES INTO REJECTION TABLE
+-- ============================================================
 
-        WHEN TRY_TO_NUMBER(
-                NULLIF(TRIM(discount_amount), ''),
-                12,
-                2
-             )
-             >
-             TRY_TO_NUMBER(
-                 NULLIF(TRIM(quantity), '')
-             )
-             *
-             TRY_TO_NUMBER(
-                 NULLIF(TRIM(unit_price), ''),
-                 12,
-                 2
-             )
-            THEN 'DISCOUNT_EXCEEDS_GROSS_AMOUNT'
+INSERT INTO SILVER.REJECTED_RECORDS
+(
+    source_file,
+    entity_name,
+    business_key,
+    rejection_reason,
+    raw_record,
+    batch_id,
+    rejected_at,
+    source_row_number
+)
 
-        WHEN UPPER(TRIM(payment_method))
-             NOT IN ('CASH', 'CARD', 'UPI', 'WALLET')
-            THEN 'INVALID_PAYMENT_METHOD'
+SELECT
+    S._source_file,
+    'SALE',
+    S.sale_id,
+    'DUPLICATE_SALE_ID',
+    S.raw_record,
+    S._batch_id,
+    CURRENT_TIMESTAMP(),
+    S._row_number
 
-        ELSE 'INVALID_SALE'
-    END,
+FROM SALES_DEDUPLICATED S
 
-    OBJECT_CONSTRUCT_KEEP_NULL(
-        'sale_id', sale_id,
-        'sale_timestamp', sale_timestamp,
-        'customer_id', customer_id,
-        'product_id', product_id,
-        'store_id', store_id,
-        'quantity', quantity,
-        'unit_price', unit_price,
-        'discount_amount', discount_amount,
-        'payment_method', payment_method
-    ),
+WHERE S.rn > 1
 
+AND NOT EXISTS
+(
+    SELECT 1
+    FROM SILVER.REJECTED_RECORDS R
+    WHERE R.source_file = S._source_file
+      AND R.entity_name = 'SALE'
+      AND R.batch_id = S._batch_id
+      AND R.source_row_number = S._row_number
+);
+
+
+-- ============================================================
+-- 6. MERGE VALID SALES INTO SILVER
+-- ============================================================
+
+MERGE INTO SILVER.SALES T
+
+USING
+(
+    SELECT
+        sale_id,
+        sale_timestamp,
+        customer_id,
+        product_id,
+        store_id,
+        quantity,
+        unit_price,
+        discount_amount,
+        payment_method,
+        _source_file,
+        _batch_id,
+        _loaded_at
+
+    FROM SALES_DEDUPLICATED
+
+    WHERE rn = 1
+
+) S
+
+ON T.sale_id = S.sale_id
+
+WHEN NOT MATCHED THEN
+
+INSERT
+(
+    sale_id,
+    sale_timestamp,
+    customer_id,
+    product_id,
+    store_id,
+    quantity,
+    unit_price,
+    discount_amount,
+    payment_method,
+    _source_file,
     _batch_id,
+    _loaded_at
+)
 
-    CURRENT_TIMESTAMP()
+VALUES
+(
+    S.sale_id,
+    S.sale_timestamp,
+    S.customer_id,
+    S.product_id,
+    S.store_id,
+    S.quantity,
+    S.unit_price,
+    S.discount_amount,
+    S.payment_method,
+    S._source_file,
+    S._batch_id,
+    S._loaded_at
+);
 
-FROM RAW.SALES
 
-WHERE NULLIF(TRIM(sale_id), '') IS NULL
+-- ============================================================
+-- 7. VERIFY SILVER SALES
+-- ============================================================
 
-   OR TRY_TO_TIMESTAMP_NTZ(
-        NULLIF(TRIM(sale_timestamp), '')
-      ) IS NULL
+SELECT COUNT(*) AS TOTAL_SILVER_SALES
+FROM SILVER.SALES;
 
-   OR NULLIF(TRIM(customer_id), '') IS NULL
 
-   OR NULLIF(TRIM(product_id), '') IS NULL
+-- ============================================================
+-- 8. CHECK REJECTED SALES
+-- ============================================================
 
-   OR NULLIF(TRIM(store_id), '') IS NULL
+SELECT
+    rejection_reason,
+    COUNT(*) AS rejected_count
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(quantity), '')
-      ) IS NULL
+FROM SILVER.REJECTED_RECORDS
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(quantity), '')
-      ) <= 0
+WHERE entity_name = 'SALE'
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(unit_price), ''),
-        12,
-        2
-      ) IS NULL
+GROUP BY rejection_reason
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(unit_price), ''),
-        12,
-        2
-      ) <= 0
+ORDER BY rejected_count DESC;
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(discount_amount), ''),
-        12,
-        2
-      ) IS NULL
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(discount_amount), ''),
-        12,
-        2
-      ) < 0
+-- ============================================================
+-- 9. CHECK FOR DUPLICATE SALE IDs
+-- ============================================================
 
-   OR TRY_TO_NUMBER(
-        NULLIF(TRIM(discount_amount), ''),
-        12,
-        2
-      )
-      >
-      TRY_TO_NUMBER(
-          NULLIF(TRIM(quantity), '')
-      )
-      *
-      TRY_TO_NUMBER(
-          NULLIF(TRIM(unit_price), ''),
-          12,
-          2
-      )
+SELECT
+    sale_id,
+    COUNT(*) AS record_count
 
-   OR UPPER(TRIM(payment_method))
-      NOT IN ('CASH', 'CARD', 'UPI', 'WALLET');
+FROM SILVER.SALES
+
+GROUP BY sale_id
+
+HAVING COUNT(*) > 1;

@@ -1,0 +1,31 @@
+Retail sales CSV dataset
+=========================
+
+Source row counts:
+customers_initial.csv: 1,000
+products_initial.csv: 100
+stores_initial.csv: 30
+sales_initial.csv: 10,000
+customers_batch_01.csv: 25
+products_batch_01.csv: 5
+sales_batch_01.csv: 200
+customers_batch_02.csv: 24
+products_batch_02.csv: 5
+sales_batch_02.csv: 200
+
+Column names and order match the project table definitions.
+
+Intentional quality scenarios include whitespace, inconsistent casing, blank
+values, invalid emails, invalid dates/timestamps, non-numeric and non-positive
+prices, invalid boolean-like values, non-positive quantities, negative or
+excessive discounts, and duplicate business keys / sale IDs.
+
+Batch scenarios:
+- Batch 01: C00001 email change; C00002 unchanged; C01022 invalid email;
+  duplicate C01023; P00001/P00002 price changes; P00101/P00103 new;
+  P00102 invalid price; a sale for C99999 before the customer arrives.
+- Batch 02: real C99999 customer arrives; C00003 region/segment change;
+  C01044 invalid email; P00003 price change; P00104-P00107 new products;
+  one excessive-discount sale and one duplicate sale ID.
+
+All data is synthetic and deterministic. No real customer information is used.
