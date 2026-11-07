@@ -1,6 +1,6 @@
 # Retail Sales Data Engineering Pipeline using Snowflake 
 
-A medium-sized, fresher-friendly Snowflake data engineering project that ingests retail CSV files, cleans and validates them, models them into dimensions/facts, and demonstrates incremental processing with Streams, Tasks, SCD Type 2, Type 1, an inferred member for a late-arriving dimension, a Dynamic Table, RBAC, masking, and monitoring.
+A medium-sized Snowflake data engineering project that ingests retail CSV files, cleans and validates them, models them into dimensions/facts, and demonstrates incremental processing with Streams, Tasks, SCD Type 2, Type 1, an inferred member for a late-arriving dimension, a Dynamic Table, RBAC, masking, and monitoring.
 
 The design intentionally uses only the four business entities required for the project:
 
