@@ -1,158 +1,353 @@
-# Retail Sales Data Engineering Pipeline using Snowflake 
+# Retail Sales Data Engineering Pipeline using Snowflake
 
-A medium-sized Snowflake data engineering project that ingests retail CSV files, cleans and validates them, models them into dimensions/facts, and demonstrates incremental processing with Streams, Tasks, SCD Type 2, Type 1, an inferred member for a late-arriving dimension, a Dynamic Table, RBAC, masking, and monitoring.
+## Overview
 
-The design intentionally uses only the four business entities required for the project:
+This project implements an end-to-end retail sales data pipeline using Snowflake and SQL. It processes customer, product, store, and sales data through RAW, SILVER, and GOLD layers, covering data ingestion, transformation, validation, dimensional modeling, and incremental processing.
 
-- Customers — incremental + SCD Type 2
-- Products — incremental + Type 1
-- Stores — initial/static
-- Sales — incremental fact
+CSV files are uploaded to a Snowflake internal stage and loaded into RAW tables using `COPY INTO`. The data is then cleaned and validated in the Silver layer before being transformed into analytical tables in Gold.
 
-It does **not** introduce Kafka, Airflow, Spark, Databricks, dbt, Kubernetes, suppliers, inventory, warehouses, or an external database.
-
-## Automation design
-
-```text
-RAW.CUSTOMERS ──> CUSTOMER_STREAM ──> TRIGGERED TASK ──> CUSTOMER PROCEDURE
-                                                   └──> SILVER.CUSTOMERS
-                                                   └──> GOLD.DIM_CUSTOMER (SCD2)
-
-RAW.SALES ──────> SALES_STREAM ──────> TRIGGERED TASK ──> SALES PROCEDURE
-                                                   ├──> SILVER.SALES
-                                                   └──> GOLD.FACT_SALES
-
-GOLD.FACT_SALES ──> DYNAMIC TABLE ──> GOLD.DAILY_SALES_SUMMARY
-```
-
-The automation starts at the RAW layer because the project deliberately uses `COPY INTO` for source-file ingestion. In a larger production deployment, a managed ingestion service could replace the manual file-to-RAW step, but it is intentionally outside this fresher-sized project.
-
-## Reliability practices
-
-- **Stream-driven automation:** tasks fire only when their stream contains unconsumed CDC records.
-- **Transactional incremental processing:** customer and sales procedures wrap related DML in explicit transactions.
-- **Retry safety:** a failed procedure rolls back its downstream changes, so the stream change is not treated as successfully consumed.
-- **Business-key idempotency:** customer processing uses `customer_id`; sales processing protects `sale_id`.
-- **SCD2 safety:** only tracked customer changes expire the current row; inferred customers are resolved in place.
-- **Quarantine safety:** rejected records use source/batch/business-key guards to avoid duplicate quarantine entries.
-- **Run monitoring:** `CONTROL.PIPELINE_RUNS` records execution status, counts, timing, and errors.
+The pipeline also demonstrates incremental data processing using Snowflake Streams, Tasks, and Stored Procedures, along with customer history tracking through SCD Type 2 and product updates using SCD Type 1.
 
 ## Architecture
 
 ```text
-                    SOURCE CSV FILES
-                           |
-                           v
-                +----------------------+
-                | INTERNAL STAGE       |
-                | RAW.RETAIL_SOURCE... |
-                +----------------------+
-                           |
-                        COPY INTO
-                           |
-                           v
-                +----------------------+
-                | RAW                  |
-                | customers/products   |
-                | stores/sales         |
-                +----------------------+
-                           |
-                     clean / validate
-                     / deduplicate
-                           |
-                           v
-                +----------------------+
-                | SILVER               |
-                | customers/products   |
-                | stores/sales         |
-                | rejected_records     |
-                +----------------------+
-                           |
-                           v
-                +----------------------+
-                | GOLD                 |
-                | dim_customer (SCD2)  |
-                | dim_product (Type 1) |
-                | dim_store             |
-                | dim_date              |
-                | fact_sales            |
-                +----------------------+
-                    |             |
-             Streams/Tasks     Dynamic Table
-                    |             |
-                    v             v
-             incremental      daily sales
-              processing        summary
+                 SOURCE CSV FILES
+                        |
+                        v
+                SNOWFLAKE STAGE
+                        |
+                    COPY INTO
+                        |
+                        v
+                 RAW LAYER
+          (Customers, Products,
+             Stores, Sales)
+                        |
+                CLEANING & VALIDATION
+                        |
+                        v
+                SILVER LAYER
+          (Cleaned and Validated Data)
+                        |
+                        v
+                 GOLD LAYER
+          (Dimensions and Fact Tables)
+                        |
+              +---------+---------+
+              |                   |
+              v                   v
+       STREAMS & TASKS       DYNAMIC TABLE
+       Incremental Loads     Daily Sales Summary
 ```
 
-## Initial data
+## Technologies Used
 
-| Entity | Rows |
+- **Cloud Data Warehouse:** Snowflake
+- **Query Language:** SQL, Snowflake Scripting
+- **Data Ingestion:** Internal Stage, `COPY INTO`
+- **Data Processing:** Streams, Tasks, Stored Procedures
+- **Data Modeling:** Dimensional Modeling, Fact and Dimension Tables
+- **Change Tracking:** SCD Type 1 and SCD Type 2
+- **Analytics:** Dynamic Tables
+- **Security:** RBAC, Dynamic Data Masking
+
+## Project Architecture
+
+The pipeline follows a Medallion Architecture with three main layers.
+
+### 1. RAW Layer
+
+The RAW layer stores data loaded directly from CSV files using Snowflake's internal stage and `COPY INTO`.
+
+Four source tables are maintained:
+
+- `RAW.CUSTOMERS`
+- `RAW.PRODUCTS`
+- `RAW.STORES`
+- `RAW.SALES`
+
+Along with the original source columns, ingestion metadata is captured:
+
+- `_SOURCE_FILE`
+- `_LOADED_AT`
+- `_BATCH_ID`
+- `_ROW_NUMBER`
+
+Source values are retained in their original form to support downstream validation and troubleshooting.
+
+### 2. SILVER Layer
+
+The Silver layer handles data cleaning, validation, and deduplication.
+
+Transformations include:
+
+- Removing leading and trailing spaces using `TRIM`.
+- Standardizing text using `LOWER` and `UPPER`.
+- Handling empty values using `NULLIF`.
+- Converting data types using `TRY_TO_NUMBER`, `TRY_TO_DATE`, and `TRY_TO_TIMESTAMP_NTZ`.
+- Validating business rules such as email formats, positive prices, and valid sales quantities.
+- Removing duplicate records using `ROW_NUMBER()` and `QUALIFY`.
+
+Invalid records are stored in:
+
+`SILVER.REJECTED_RECORDS`
+
+The original record is retained along with its rejection reason, making it easier to investigate data-quality issues.
+
+### 3. GOLD Layer
+
+The Gold layer contains dimensional models used for reporting and analytical queries.
+
+| Table | Description |
+|---|---|
+| `DIM_CUSTOMER` | Customer dimension with SCD Type 2 |
+| `DIM_PRODUCT` | Product dimension with Type 1 updates |
+| `DIM_STORE` | Store dimension |
+| `DIM_DATE` | Date dimension |
+| `FACT_SALES` | Sales fact table |
+
+Surrogate keys are used in the dimension tables and referenced by the fact table.
+
+Sales records are associated with the appropriate customer, product, and store dimension records.
+
+## Dataset
+
+The project uses generated retail CSV datasets covering four business entities.
+
+### Initial Load
+
+| Entity | Records |
 |---|---:|
 | Customers | 1,000 |
 | Products | 100 |
 | Stores | 30 |
 | Sales | 10,000 |
 
-The CSVs are deterministic. Important scenarios are deliberately controlled rather than random.
+### Incremental Loads
 
-## Incremental data
+Two additional batches are used to demonstrate incremental processing.
 
 | Batch | Customers | Products | Sales |
 |---|---:|---:|---:|
 | Batch 01 | 25 | 5 | 200 |
 | Batch 02 | 24 | 5 | 200 |
 
-The incremental files are intentionally small so that the pipeline can be inspected manually.
+The datasets contain scenarios such as customer updates, new customers, duplicate records, invalid emails, product price changes, invalid prices, and sales arriving before their corresponding customer records.
 
-### Controlled scenarios
+## Incremental Processing
 
-Batch 01:
+Snowflake Streams capture newly inserted records from the RAW customer and sales tables.
 
-- `C00001` changes email -> SCD Type 2
-- `C00002` is unchanged -> no new SCD2 version
-- `C01001`... new customers
-- `C01022` has an invalid email -> rejected
-- `C01023` appears twice -> deduplicated using `ROW_NUMBER`
-- `P00001` and `P00002` change price -> Type 1 overwrite
-- `P00101` and `P00103` are new products
-- `P00102` has a non-positive price -> rejected
-- `C99999` appears in a valid sale before its customer record arrives -> inferred customer
-- one sale has non-positive quantity -> rejected
-- one sale ID is duplicated within the batch
+Two streams are created:
 
-Batch 02:
+- `RAW.CUSTOMER_STREAM`
+- `RAW.SALES_STREAM`
 
-- `C99999` real customer record arrives -> inferred row is resolved in-place
-- `C00003` changes region/segment -> another SCD2 version
-- new customers are added
-- `C01044` has an invalid email -> rejected
-- `P00003` changes price -> Type 1 overwrite
-- new products are added
-- one sale has a discount larger than gross amount -> rejected
-- one sale ID is duplicated within the batch
+The streams are configured with `APPEND_ONLY = TRUE` because the source ingestion process appends new records.
 
-## Why the design treats entities differently
+The captured records are processed through stored procedures.
 
-### Customers -> incremental + SCD Type 2
+### Customer Processing
 
-Customer attributes such as email, phone, region, and segment can change. The Gold dimension therefore preserves historical versions.
+The customer procedure:
 
-### Products -> incremental + Type 1
+1. Reads new records from `CUSTOMER_STREAM`.
+2. Validates and deduplicates incoming customers.
+3. Stores invalid records in the rejected-record table.
+4. Updates the Silver customer table.
+5. Applies SCD Type 2 logic to the Gold customer dimension.
+6. Resolves inferred customer records when actual customer information arrives.
 
-Product price/category/brand changes are represented by the latest state. Old versions are not required for this project.
+### Sales Processing
 
-### Stores -> initial load only
+The sales procedure:
 
-Stores are treated as relatively static master data. There is intentionally no store stream, store incremental procedure, or store batch file.
+1. Reads new records from `SALES_STREAM`.
+2. Validates and deduplicates sales.
+3. Quarantines invalid records.
+4. Updates the Silver sales table.
+5. Resolves customer, product, and store surrogate keys.
+6. Inserts new records into `GOLD.FACT_SALES`.
 
-### Sales -> incremental fact
+Business-key checks using `customer_id` and `sale_id` help prevent duplicate processing.
 
-Sales arrive continuously. Only newly arrived sales are processed into the fact table.
+Both procedures use explicit transactions so that related changes are committed or rolled back together.
 
----
+## Slowly Changing Dimensions
 
-# Folder structure
+### SCD Type 2 – Customers
+
+Customer attributes such as email, region, phone number, and segment can change over time.
+
+SCD Type 2 maintains historical customer records rather than overwriting previous values.
+
+For example, customer `C00001` initially has:
+
+```text
+email  = customer00001@example.com
+region = SOUTH
+```
+
+In Batch 01, the customer's email changes:
+
+```text
+email  = updated.customer1@example.com
+region = SOUTH
+```
+
+The existing dimension record is expired, and a new version is inserted.
+
+The dimension maintains:
+
+- `EFFECTIVE_START_DATE`
+- `EFFECTIVE_END_DATE`
+- `IS_CURRENT`
+
+Each version receives a different surrogate key.
+
+Historical sales are linked to the customer version that was valid when the sale occurred.
+
+The lookup uses an effective-date condition:
+
+```sql
+c.effective_start_date <= s.sale_timestamp
+AND s.sale_timestamp < c.effective_end_date
+```
+
+### SCD Type 1 – Products
+
+Product attributes such as price, category, and brand are updated directly in the existing dimension record.
+
+For example:
+
+```text
+P00001
+
+Old price: 500
+New price: 550
+```
+
+The Gold dimension stores the latest price without maintaining historical versions.
+
+## Late-Arriving Dimension Handling
+
+The project also handles sales arriving before their corresponding customer records.
+
+In Batch 01, a sale arrives for customer `C99999`, but the customer does not yet exist in the customer dimension.
+
+An inferred customer record is created:
+
+```text
+customer_id   = C99999
+customer_name = UNKNOWN
+is_inferred   = TRUE
+```
+
+A surrogate key is assigned to this record and used by the corresponding sales fact.
+
+In Batch 02, the actual customer record arrives.
+
+Instead of inserting another dimension record, the existing inferred record is updated with the real customer information.
+
+```text
+is_inferred = FALSE
+```
+
+The original surrogate key is retained, so previously loaded sales continue referencing the correct customer dimension record.
+
+## Stored Procedures and Tasks
+
+Two stored procedures handle incremental processing:
+
+```text
+GOLD.PROCESS_CUSTOMER_INCREMENTAL
+GOLD.PROCESS_SALES_INCREMENTAL
+```
+
+Two Snowflake Tasks execute these procedures:
+
+```text
+GOLD.CUSTOMER_INCREMENTAL_TASK
+GOLD.SALES_INCREMENTAL_TASK
+```
+
+Both tasks use `SYSTEM$STREAM_HAS_DATA()` to check whether their respective streams contain unconsumed records.
+
+The tasks are created in a suspended state and can be resumed after validating the manual incremental processing.
+
+```sql
+ALTER TASK GOLD.CUSTOMER_INCREMENTAL_TASK RESUME;
+
+ALTER TASK GOLD.SALES_INCREMENTAL_TASK RESUME;
+```
+
+This allows new customer and sales records to be processed automatically when data arrives in RAW.
+
+## Dynamic Table – Daily Sales Summary
+
+A Dynamic Table is created to maintain daily sales aggregations.
+
+Object:
+
+`GOLD.DAILY_SALES_SUMMARY`
+
+It contains:
+
+| Column | Description |
+|---|---|
+| `SALE_DATE` | Date of sale |
+| `TOTAL_ORDERS` | Number of orders |
+| `TOTAL_QUANTITY` | Units sold |
+| `GROSS_SALES` | Sales before discounts |
+| `DISCOUNT_AMOUNT` | Total discounts |
+| `NET_SALES` | Sales after discounts |
+
+The Dynamic Table uses a target lag of five minutes to maintain the aggregated results.
+
+This also demonstrates the difference between procedural incremental processing using Streams and Tasks and declarative data transformations using Dynamic Tables.
+
+## Security and Access Control
+
+Basic role-based access control is implemented using three custom roles:
+
+- `DATA_ENGINEER`
+- `DATA_ANALYST`
+- `DATA_VIEWER`
+
+Privileges such as `USAGE` and `SELECT` are assigned based on the responsibilities of each role.
+
+A masking policy is also applied to:
+
+`GOLD.DIM_CUSTOMER.EMAIL`
+
+Users with the `DATA_ENGINEER` and `ACCOUNTADMIN` roles can access the original email address, while other roles see a masked value.
+
+*Note: Dynamic Data Masking requires Snowflake Enterprise Edition or higher.*
+
+## Monitoring
+
+The project includes a control schema for pipeline monitoring.
+
+`CONTROL.PIPELINE_MONITORING`
+
+Execution details are recorded in:
+
+`CONTROL.PIPELINE_RUNS`
+
+The monitoring implementation tracks information such as:
+
+- Pipeline execution status
+- Records processed
+- Records rejected
+- Execution start and end times
+- Error messages
+
+Snowflake history views are also used to inspect ingestion and task execution:
+
+- `INFORMATION_SCHEMA.COPY_HISTORY`
+- `INFORMATION_SCHEMA.TASK_HISTORY`
+
+## Repository Structure
 
 ```text
 retail-snowflake-data-engineering/
@@ -224,25 +419,31 @@ retail-snowflake-data-engineering/
     +-- sales_batch_02.csv
 ```
 
----
+## Project Execution
 
-# Execution order
+Follow the sequence below to set up and execute the pipeline.
 
-Run the project in this order. Do not turn on the Tasks before the manual batch flow has been verified.
+### Step 1 – Create Database Objects
 
-## Phase 1 — Setup
+Execute:
 
-1. `01_setup/database_schemas.sql`
-2. `01_setup/file_format.sql`
-3. `01_setup/stage.sql`
+```text
+01_setup/database_schemas.sql
+01_setup/file_format.sql
+01_setup/stage.sql
+```
 
-Upload the initial files into:
+This creates the database, warehouse, schemas, file format, and internal stage.
+
+### Step 2 – Upload Source Files
+
+Upload the four initial CSV files to:
 
 ```text
 @RETAIL_SUPPLY_CHAIN.RAW.RETAIL_SOURCE_STAGE/initial/
 ```
 
-The files are:
+Files:
 
 ```text
 customers_initial.csv
@@ -251,27 +452,11 @@ stores_initial.csv
 sales_initial.csv
 ```
 
-You can upload them from Snowsight's stage UI, Snowflake CLI, or SnowSQL.
+Files can be uploaded using Snowsight, SnowSQL, or Snowflake CLI.
 
-For SnowSQL/Snowflake CLI-style file upload, the pattern is:
+### Step 3 – Load RAW Tables
 
-```sql
-PUT 'file:///absolute/path/data/customers_initial.csv'
-  @RETAIL_SUPPLY_CHAIN.RAW.RETAIL_SOURCE_STAGE/initial
-  AUTO_COMPRESS=TRUE;
-```
-
-Repeat for the other three files.
-
-Then:
-
-```sql
-LIST @RETAIL_SUPPLY_CHAIN.RAW.RETAIL_SOURCE_STAGE/initial;
-```
-
-## Phase 2 — RAW
-
-Run:
+Execute:
 
 ```text
 02_raw/raw_tables.sql
@@ -279,7 +464,7 @@ Run:
 02_raw/raw_validation.sql
 ```
 
-Expected initial RAW counts:
+Verify the initial record counts:
 
 ```text
 CUSTOMERS = 1000
@@ -288,20 +473,9 @@ STORES    = 30
 SALES     = 10000
 ```
 
-RAW intentionally preserves source values and ingestion metadata:
+### Step 4 – Build SILVER Layer
 
-```text
-_source_file
-_loaded_at
-_batch_id
-_row_number
-```
-
-No business transformation belongs in RAW.
-
-## Phase 3 — SILVER
-
-Run:
+Execute:
 
 ```text
 03_silver/rejected_records.sql
@@ -312,50 +486,11 @@ Run:
 03_silver/silver_validation.sql
 ```
 
-Silver performs:
+Verify the transformed records, rejected records, and business-key uniqueness.
 
-```text
-TRIM
-LOWER / UPPER
-NULLIF
-TRY_TO_DATE
-TRY_TO_TIMESTAMP_NTZ
-TRY_TO_NUMBER
-validation
-deduplication
-```
+### Step 5 – Build GOLD Layer
 
-Invalid records go to:
-
-```text
-SILVER.REJECTED_RECORDS
-```
-
-The original values are retained in `raw_record`.
-
-### Important count rule
-
-Do not expect:
-
-```text
-RAW = SILVER + REJECTED
-```
-
-because a valid duplicate can be removed during deduplication.
-
-Validate separately:
-
-```text
-RAW arrivals
-INVALID records
-DUPLICATES
-SILVER valid records
-BUSINESS KEY uniqueness
-```
-
-## Phase 4 — GOLD
-
-Run:
+Execute:
 
 ```text
 04_gold/dim_customer.sql
@@ -366,403 +501,109 @@ Run:
 04_gold/gold_validation.sql
 ```
 
-Gold contains:
+Verify dimension records, fact records, surrogate keys, and foreign-key coverage.
+
+### Step 6 – Create Streams
+
+Execute:
 
 ```text
-DIM_CUSTOMER
-DIM_PRODUCT
-DIM_STORE
-DIM_DATE
-FACT_SALES
+05_streams/customer_stream.sql
+05_streams/sales_stream.sql
 ```
 
-The initial customer dimension is one current version per customer.
+These streams capture subsequent customer and sales inserts.
 
-The fact table uses surrogate keys rather than natural IDs.
+### Step 7 – Process Incremental Batches
 
----
-
-# SCD Type 2
-
-The controlled example is `C00001`.
-
-Initial:
+Execute:
 
 ```text
-customer_id = C00001
-email       = customer00001@example.com
-region      = SOUTH
-segment     = REGULAR
+06_incremental/batch_01.sql
+06_incremental/batch_01_validation.sql
+06_incremental/batch_02.sql
+06_incremental/batch_02_validation.sql
 ```
 
-Batch 01:
+The batches demonstrate customer changes, new records, duplicates, invalid data, product updates, and late-arriving customer handling.
+
+### Step 8 – Create Stored Procedures
+
+Execute:
 
 ```text
-customer_id = C00001
-email       = updated.customer1@example.com
-region      = SOUTH
-segment     = REGULAR
-updated_at  = 2026-09-01 09:00:00
+07_procedures/customer_incremental.sql
+07_procedures/sales_incremental.sql
 ```
 
-The result is:
+Test the procedures manually before enabling automation.
+
+### Step 9 – Enable Tasks
+
+Execute:
 
 ```text
-OLD VERSION
-is_current = FALSE
-effective_end_date = 2026-09-01 09:00:00
-
-NEW VERSION
-is_current = TRUE
-effective_start_date = 2026-09-01 09:00:00
-effective_end_date = 9999-12-31 23:59:59
+08_tasks/tasks.sql
 ```
 
-The two rows have different `customer_key` surrogate keys.
+After verifying the manual batch processing, resume the tasks to enable automatic processing.
 
-The fact lookup uses:
+### Step 10 – Create Dynamic Table
 
-```sql
-c.effective_start_date <= s.sale_timestamp
-AND s.sale_timestamp < c.effective_end_date
-```
-
-This is why a historical sale continues to point to the customer version that was valid at the time of the sale.
-
----
-
-# Late-arriving dimension
-
-Batch 01 contains a sale for:
+Execute:
 
 ```text
-customer_id = C99999
+09_dynamic_tables/daily_sales_summary.sql
 ```
 
-but there is no real C99999 customer record yet.
+Verify the daily sales aggregation.
 
-The sales procedure creates:
+### Step 11 – Configure Security
+
+Execute:
 
 ```text
-customer_id = C99999
-customer_name = UNKNOWN
-is_inferred = TRUE
-```
-
-The inferred row receives a surrogate `customer_key`.
-
-The Batch 01 sale uses that key.
-
-Batch 02 later contains the real C99999 customer.
-
-The customer procedure updates the existing inferred row:
-
-```text
-UNKNOWN
-    |
-    v
-real customer information
-```
-
-and changes:
-
-```text
-is_inferred = TRUE
-```
-
-to:
-
-```text
-is_inferred = FALSE
-```
-
-The critical rule is:
-
-```text
-SAME customer_key
-```
-
-No second dimension row is created for C99999.
-
-This keeps the Batch 01 fact's foreign key valid.
-
----
-
-# Streams
-
-The project uses only:
-
-```text
-RAW.CUSTOMER_STREAM
-RAW.SALES_STREAM
-```
-
-Stores do not have a stream because stores are intentionally static.
-
-Streams capture changes between offsets. The stream metadata includes values such as:
-
-```text
-METADATA$ACTION
-METADATA$ISUPDATE
-METADATA$ROW_ID
-```
-
-The project uses `APPEND_ONLY = TRUE` because the ingestion pattern appends newly arrived CSV rows into RAW.
-
-The batch files therefore create INSERT change records in the streams.
-
----
-
-# Incremental processing
-
-## Customer
-
-```text
-RAW.CUSTOMER_STREAM
-        |
-        v
-validate + deduplicate
-        |
-        +--> rejected records
-        |
-        v
-SILVER.CUSTOMERS
-        |
-        v
-GOLD.DIM_CUSTOMER
-        |
-        +--> SCD2 change
-        |
-        +--> inferred-member resolution
-```
-
-## Sales
-
-```text
-RAW.SALES_STREAM
-        |
-        v
-validate + deduplicate
-        |
-        +--> rejected records
-        |
-        v
-SILVER.SALES
-        |
-        v
-dimension lookups
-        |
-        v
-GOLD.FACT_SALES
-```
-
----
-
-# Type 1 product processing
-
-Product changes are applied directly to the current Gold row.
-
-Example:
-
-```text
-P00001
-old price -> 500
-new price -> 550
-```
-
-Gold ends with:
-
-```text
-P00001 -> 550
-```
-
-There is no product history table.
-
-The project deliberately keeps Type 1 simple.
-
----
-
-# Stored procedures
-
-Only two stored procedures are used:
-
-```text
-GOLD.PROCESS_CUSTOMER_INCREMENTAL
-GOLD.PROCESS_SALES_INCREMENTAL
-```
-
-They consume their streams and perform the incremental logic.
-
-The procedures use Snowflake Scripting with small temporary working tables.
-
-They are not generic enterprise frameworks.
-
----
-
-# Tasks
-
-Two small triggered tasks are defined:
-
-```text
-GOLD.CUSTOMER_INCREMENTAL_TASK
-GOLD.SALES_INCREMENTAL_TASK
-```
-
-Each task uses:
-
-```sql
-WHEN SYSTEM$STREAM_HAS_DATA(...)
-```
-
-and calls the corresponding procedure only when its stream has unconsumed change data.
-
-The tasks intentionally have no `SCHEDULE`. This models event-driven RAW -> SILVER -> GOLD processing after the RAW tables have been loaded. Keep them suspended while validating the manual initial/batch flow, then resume them when automation is ready.
-
-The procedures use explicit transactions around the stream consumption and downstream DML. If a procedure fails, the transaction is rolled back and the task can retry the unconsumed stream changes without leaving a partially-applied SCD2/fact update.
-
-The tasks are created **SUSPENDED** initially.
-
-After manual Batch 01 and Batch 02 testing succeeds, they can be enabled:
-
-```sql
-ALTER TASK GOLD.CUSTOMER_INCREMENTAL_TASK RESUME;
-ALTER TASK GOLD.SALES_INCREMENTAL_TASK RESUME;
-```
-
-The project intentionally avoids a large orchestration graph.
-
----
-
-# Dynamic Table
-
-The project has one Dynamic Table:
-
-```text
-GOLD.DAILY_SALES_SUMMARY
-```
-
-It contains:
-
-```text
-sale_date
-total_orders
-total_quantity
-gross_sales
-discount_amount
-net_sales
-```
-
-Target lag:
-
-```text
-5 minutes
-```
-
-Important: target lag is a freshness target, not a guaranteed five-minute refresh interval.
-
-This gives a clean interview comparison:
-
-```text
-Streams + Tasks
-    -> explicitly capture changes and run procedural work
-
-Dynamic Table
-    -> declaratively materializes a query result and keeps it fresh
-```
-
----
-
-# Security
-
-Three custom roles are demonstrated:
-
-```text
-DATA_ENGINEER
-DATA_ANALYST
-DATA_VIEWER
-```
-
-The roles show basic:
-
-```text
-USAGE
-SELECT
-object-level access
-```
-
-A masking policy is applied to:
-
-```text
-GOLD.DIM_CUSTOMER.email
-```
-
-The example allows `DATA_ENGINEER` and `ACCOUNTADMIN` to see the real value and masks it for other roles.
-
-The masking-policy feature requires Snowflake Enterprise Edition or higher.
-
-If your account does not support masking policies, skip:
-
-```text
+10_security/roles.sql
 10_security/masking_policy.sql
 ```
 
-The core pipeline does not depend on masking.
+Run the scripts using a role with the required administrative privileges. The masking policy can be skipped if the account edition does not support it.
 
----
+### Step 12 – Monitoring and Final Validation
 
-# Monitoring
-
-The project includes:
+Execute:
 
 ```text
-CONTROL.PIPELINE_MONITORING
+11_monitoring/monitoring.sql
+11_monitoring/final_validation.sql
 ```
 
-and example history queries for:
+Review pipeline execution history, task status, record counts, and data-quality checks.
 
-```text
-COPY_HISTORY
-TASK_HISTORY
-```
+## Validation and Testing
 
-The goal is observability without building a separate monitoring platform.
+The following checks are used to validate the pipeline.
 
----
+**RAW Layer**
+- Verify source record counts.
+- Check file names and batch IDs.
+- Verify ingestion timestamps and row numbers.
 
-# Validation checklist
+**SILVER Layer**
+- Check invalid and rejected records.
+- Verify duplicate handling.
+- Check null values and data types.
+- Validate business-key uniqueness.
 
-## RAW
+**GOLD Layer**
+- Verify dimension and fact counts.
+- Check surrogate-key relationships.
+- Validate foreign-key coverage.
+- Verify sales calculations.
 
-Check:
+**SCD Type 2**
 
-- row counts
-- source file
-- batch ID
-- load metadata
-
-## SILVER
-
-Check:
-
-- valid rows
-- rejected rows
-- duplicate diagnostics
-- nulls
-- business-key uniqueness
-
-## GOLD
-
-Check:
-
-- dimension counts
-- fact count
-- surrogate keys
-- foreign-key coverage
-- calculated amounts
-
-## SCD2
-
-This must return zero rows:
+Ensure that a customer has no more than one current dimension record:
 
 ```sql
 SELECT customer_id
@@ -771,7 +612,9 @@ GROUP BY customer_id
 HAVING COUNT_IF(is_current) > 1;
 ```
 
-## Late-arriving customer
+Expected result: zero rows.
+
+**Late-Arriving Dimension**
 
 After Batch 01:
 
@@ -785,48 +628,96 @@ After Batch 02:
 C99999 -> is_inferred = FALSE
 ```
 
-The `customer_key` must remain unchanged.
+The `CUSTOMER_KEY` should remain unchanged between both batches.
 
----
+## Sample Analytical Queries
 
-# Example analytics
+**Daily Sales Revenue**
 
 ```sql
--- Daily revenue
-SELECT sale_date, net_sales
+SELECT
+    sale_date,
+    net_sales
 FROM GOLD.DAILY_SALES_SUMMARY
 ORDER BY sale_date;
+```
 
--- Revenue by region using the customer version valid at sale time
+**Sales by Customer Region**
+
+```sql
 SELECT
     c.region,
     SUM(f.net_amount) AS net_sales
 FROM GOLD.FACT_SALES f
 JOIN GOLD.DIM_CUSTOMER c
-  ON f.customer_key = c.customer_key
+    ON f.customer_key = c.customer_key
 GROUP BY c.region
 ORDER BY net_sales DESC;
+```
 
--- Product sales
+**Sales by Product Category**
+
+```sql
 SELECT
     p.category,
     SUM(f.net_amount) AS net_sales,
     SUM(f.quantity) AS units
 FROM GOLD.FACT_SALES f
 JOIN GOLD.DIM_PRODUCT p
-  ON f.product_key = p.product_key
+    ON f.product_key = p.product_key
 GROUP BY p.category
 ORDER BY net_sales DESC;
+```
 
--- Store performance
+**Store Performance**
+
+```sql
 SELECT
     s.store_id,
     s.city,
     SUM(f.net_amount) AS net_sales
 FROM GOLD.FACT_SALES f
 JOIN GOLD.DIM_STORE s
-  ON f.store_key = s.store_key
+    ON f.store_key = s.store_key
 GROUP BY s.store_id, s.city
 ORDER BY net_sales DESC;
 ```
+
+## Key Concepts Demonstrated
+
+| Concept | Snowflake Implementation |
+|---|---|
+| Data ingestion | Internal Stage, COPY INTO |
+| Data organization | RAW, SILVER, GOLD |
+| Data cleaning | SQL transformations |
+| Data validation | Business rules |
+| Deduplication | ROW_NUMBER, QUALIFY |
+| Error handling | Rejected Records |
+| Incremental processing | Streams |
+| Automation | Tasks |
+| Procedural processing | Stored Procedures |
+| Historical tracking | SCD Type 2 |
+| Latest-value updates | SCD Type 1 |
+| Late-arriving dimensions | Inferred Members |
+| Dimensional modeling | Fact and Dimension Tables |
+| Aggregation | Dynamic Tables |
+| Access management | RBAC |
+| Data protection | Dynamic Data Masking |
+| Monitoring | COPY_HISTORY, TASK_HISTORY |
+
+## Resume Description
+
+**Retail Sales Data Engineering Pipeline | Snowflake, SQL**
+
+- Developed an end-to-end retail data pipeline in Snowflake, processing 1K customers, 100 products, 30 stores, and 10K sales records across RAW, SILVER, and GOLD layers using COPY INTO, SQL transformations, data validation, and deduplication.
+- Implemented incremental processing using Streams, Tasks, and Stored Procedures, with SCD Type 2 customer history, SCD Type 1 product updates, and inferred-member handling for late-arriving dimensions.
+- Built dimensional models and a Dynamic Table for daily sales analytics, incorporating surrogate keys, rejected-record handling, RBAC, dynamic data masking, and pipeline monitoring.
+
+## Conclusion
+
+This project covers the key stages of building a data engineering pipeline in Snowflake, from loading raw CSV data to preparing analytical datasets.
+
+It brings together data ingestion, transformation, incremental processing, dimensional modeling, data quality, security, and monitoring in one project.
+
+The implementation also provides practical examples of handling changing customer attributes, late-arriving dimensions, duplicate records, and invalid source data using Snowflake SQL features.
 
