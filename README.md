@@ -160,8 +160,8 @@ Implemented Snowflake security features:
 
 ## Learning Outcomes
 
-Through this project, I gained practical experience in building data pipelines using Snowflake, implementing incremental ETL workflows, designing dimensional data models, handling real-world data quality scenarios, automating pipeline execution, and securing analytical data.
+Through this project, I gained practical experience in building data pipelines using Snowflake, implementing incremental ETL\ELT workflows, designing dimensional data models, handling real-world data quality scenarios, automating pipeline execution, and securing analytical data.
 
 ---
 
-**Project Focus:** Data Engineering | Snowflake | SQL | Data Warehousing | ETL | Incremental Data Processing
+**Project Focus:** Data Engineering | Snowflake | SQL | Data Warehousing | ETL\ELT | Incremental Data Processing
