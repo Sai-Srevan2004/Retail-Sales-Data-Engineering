@@ -2,6 +2,10 @@
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 USE SCHEMA SILVER;
 
+--============================================================
+-- CREATION OF GLOBAL REJECTION RECORDS TABLE IN SILVER LAYER
+--============================================================
+
 CREATE TABLE IF NOT EXISTS SILVER.REJECTED_RECORDS
 (
     rejection_id       NUMBER AUTOINCREMENT START 1 INCREMENT 1,

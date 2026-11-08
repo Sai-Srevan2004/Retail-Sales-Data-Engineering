@@ -1,7 +1,7 @@
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 
 --===================================================
---ROOT TASK
+-- 1. ROOT TASK
 --===================================================
 
 CREATE OR REPLACE TASK CONTROL.TASK_PIPELINE_ROOT
@@ -14,7 +14,7 @@ AS
     SELECT 1;
 
 --===================================================
---SILVER TASKS
+-- 2. SILVER TASKS
 --===================================================
 
 
@@ -39,7 +39,7 @@ AS
     CALL SILVER.LOAD_SILVER_SALES();
 
 --===================================================
---GOLD TASKS
+-- 3. GOLD TASKS
 --===================================================
 
 
@@ -68,7 +68,7 @@ AS
 
 
 --===================================================
---RESUME TASKS
+-- 4. RESUME TASKS
 --===================================================
 
 
@@ -84,7 +84,7 @@ ALTER TASK CONTROL.TASK_SILVER_SALES RESUME;
 ALTER TASK CONTROL.TASK_PIPELINE_ROOT RESUME;
 
 --===================================================
---CHECK TASKS
+-- 5. CHECK TASKS
 --===================================================
 
 SHOW TASKS IN SCHEMA RETAIL_SUPPLY_CHAIN.CONTROL;

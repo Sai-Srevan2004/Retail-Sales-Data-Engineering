@@ -40,11 +40,8 @@ BEGIN TRANSACTION;
 -- =========================================================
 -- 2. CREATE INFERRED CUSTOMER MEMBERS
 -- =========================================================
--- If a sale arrives before its customer exists in Gold,
--- create an inferred customer dimension record.
---
--- The effective start date is the earliest sale timestamp
--- for that customer.
+-- If a sale arrives before its customer exists in Gold, create an inferred customer dimension record.
+-- The effective start date is the earliest sale timestamp for that customer.
 
 INSERT INTO GOLD.DIM_CUSTOMER (
     customer_id,

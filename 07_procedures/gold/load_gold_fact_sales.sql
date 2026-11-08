@@ -1,6 +1,10 @@
 
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 
+--=================================================================
+-- CREATION OF PROCEDURE: LOAD_GOLD_FACT_SALES
+--=================================================================
+
 CREATE OR REPLACE PROCEDURE GOLD.LOAD_GOLD_FACT_SALES()
 RETURNS STRING
 LANGUAGE SQL
@@ -15,18 +19,21 @@ DECLARE
 
 BEGIN
 
-    -- Create temporary tables before transaction
-    CREATE OR REPLACE TEMPORARY TABLE SALES_BATCH
-    LIKE SILVER.SALES;
+    --=============================================================
+    -- 1. CREATE TEMPORARY TABLE
+    --=============================================================
 
-    CREATE OR REPLACE TEMPORARY TABLE SALES_DEDUPLICATED
+    CREATE OR REPLACE TEMPORARY TABLE SALES_BATCH
     LIKE SILVER.SALES;
 
 
     BEGIN TRANSACTION;
 
 
-    -- 1. Capture incoming sales
+    --=============================================================
+    -- 2. CAPTURE INCOMING SALES
+    --=============================================================
+
     INSERT INTO SALES_BATCH
     SELECT
         sale_id,
@@ -41,24 +48,16 @@ BEGIN
         _source_file,
         _batch_id,
         _loaded_at
+
     FROM SILVER.SALES_STREAM
+
     WHERE METADATA$ACTION = 'INSERT';
 
 
-    -- 2. Deduplicate by sale_id
-    INSERT INTO SALES_DEDUPLICATED
-    SELECT *
-    FROM SALES_BATCH
-    QUALIFY ROW_NUMBER() OVER
-    (
-        PARTITION BY sale_id
-        ORDER BY
-            _loaded_at DESC,
-            _source_file DESC
-    ) = 1;
+    --=============================================================
+    -- 3. CREATE INFERRED CUSTOMERS
+    --=============================================================
 
-
-    -- 3. Create inferred customers
     INSERT INTO GOLD.DIM_CUSTOMER
     (
         customer_id,
@@ -75,6 +74,7 @@ BEGIN
         _batch_id,
         _loaded_at
     )
+
     SELECT
         S.customer_id,
         'UNKNOWN',
@@ -89,17 +89,31 @@ BEGIN
         'INFERRED',
         'INFERRED',
         CURRENT_TIMESTAMP()::TIMESTAMP_NTZ
-    FROM SALES_DEDUPLICATED S
+
+    FROM (
+        SELECT *
+        FROM SALES_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sale_id
+            ORDER BY _loaded_at DESC, _source_file DESC
+        ) = 1
+    ) S
+
     WHERE NOT EXISTS
     (
         SELECT 1
         FROM GOLD.DIM_CUSTOMER C
         WHERE C.customer_id = S.customer_id
     )
+
     GROUP BY S.customer_id;
 
 
-    -- 4. Create inferred products
+    --=============================================================
+    -- 4. CREATE INFERRED PRODUCTS
+    --=============================================================
+
     INSERT INTO GOLD.DIM_PRODUCT
     (
         product_id,
@@ -115,6 +129,7 @@ BEGIN
         _batch_id,
         _loaded_at
     )
+
     SELECT
         S.product_id,
         'UNKNOWN',
@@ -128,17 +143,31 @@ BEGIN
         'INFERRED',
         'INFERRED',
         CURRENT_TIMESTAMP()::TIMESTAMP_NTZ
-    FROM SALES_DEDUPLICATED S
+
+    FROM (
+        SELECT *
+        FROM SALES_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sale_id
+            ORDER BY _loaded_at DESC, _source_file DESC
+        ) = 1
+    ) S
+
     WHERE NOT EXISTS
     (
         SELECT 1
         FROM GOLD.DIM_PRODUCT P
         WHERE P.product_id = S.product_id
     )
+
     GROUP BY S.product_id;
 
 
-    -- 5. Create inferred stores
+    --=============================================================
+    -- 5. CREATE INFERRED STORES
+    --=============================================================
+
     INSERT INTO GOLD.DIM_STORE
     (
         store_id,
@@ -153,6 +182,7 @@ BEGIN
         _batch_id,
         _loaded_at
     )
+
     SELECT
         S.store_id,
         'UNKNOWN',
@@ -165,20 +195,43 @@ BEGIN
         'INFERRED',
         'INFERRED',
         CURRENT_TIMESTAMP()::TIMESTAMP_NTZ
-    FROM SALES_DEDUPLICATED S
+
+    FROM (
+        SELECT *
+        FROM SALES_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sale_id
+            ORDER BY _loaded_at DESC, _source_file DESC
+        ) = 1
+    ) S
+
     WHERE NOT EXISTS
     (
         SELECT 1
         FROM GOLD.DIM_STORE ST
         WHERE ST.store_id = S.store_id
     )
+
     GROUP BY S.store_id;
 
 
-    -- 6. Validate all dimension lookups
+    --=============================================================
+    -- 6. VALIDATE ALL DIMENSION LOOKUPS
+    --=============================================================
+
     SELECT COUNT(*)
     INTO :missing_dimensions
-    FROM SALES_DEDUPLICATED S
+
+    FROM (
+        SELECT *
+        FROM SALES_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sale_id
+            ORDER BY _loaded_at DESC, _source_file DESC
+        ) = 1
+    ) S
 
     LEFT JOIN GOLD.DIM_DATE D
         ON D.full_date = TO_DATE(S.sale_timestamp)
@@ -201,12 +254,16 @@ BEGIN
 
 
     -- Stop processing if any dimension lookup is missing
+
     IF (missing_dimensions > 0) THEN
         RAISE missing_dimension_error;
     END IF;
 
 
-    -- 7. Insert sales into FACT_SALES
+    --=============================================================
+    -- 7. INSERT SALES INTO FACT_SALES
+    --=============================================================
+
     INSERT INTO GOLD.FACT_SALES
     (
         sale_id,
@@ -226,6 +283,7 @@ BEGIN
         _batch_id,
         _loaded_at
     )
+
     SELECT
         S.sale_id,
         D.date_key,
@@ -243,6 +301,7 @@ BEGIN
         ),
 
         ROUND(S.quantity * S.unit_price, 2),
+
         S.discount_amount,
 
         ROUND(
@@ -255,7 +314,15 @@ BEGIN
         S._batch_id,
         S._loaded_at
 
-    FROM SALES_DEDUPLICATED S
+    FROM (
+        SELECT *
+        FROM SALES_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sale_id
+            ORDER BY _loaded_at DESC, _source_file DESC
+        ) = 1
+    ) S
 
     INNER JOIN GOLD.DIM_DATE D
         ON D.full_date = TO_DATE(S.sale_timestamp)
@@ -279,18 +346,24 @@ BEGIN
     );
 
 
+    --=============================================================
+    -- 8. CAPTURE PROCESSED ROW COUNT
+    --=============================================================
+
     SELECT COUNT(*)
     INTO :rows_processed
-    FROM SALES_DEDUPLICATED;
+    FROM SALES_BATCH;
 
 
     COMMIT;
+
 
     RETURN 'Gold fact sales processing completed. Records captured: '
            || TO_VARCHAR(rows_processed);
 
 
 EXCEPTION
+
     WHEN OTHER THEN
         ROLLBACK;
         RAISE;

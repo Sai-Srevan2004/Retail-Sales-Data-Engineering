@@ -1,7 +1,7 @@
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 
 -- =========================================================
--- RAW STREAMS
+-- 1. RAW STREAMS
 -- =========================================================
 
 CREATE STREAM IF NOT EXISTS RAW.CUSTOMERS_STREAM
@@ -14,7 +14,7 @@ CREATE STREAM IF NOT EXISTS RAW.SALES_STREAM
 ON TABLE RAW.SALES;
 
 -- =========================================================
--- VALIDATION
+-- 2. VALIDATION
 -- =========================================================
 
 SHOW STREAMS IN SCHEMA RAW;

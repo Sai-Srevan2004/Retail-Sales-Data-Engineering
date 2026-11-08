@@ -3,7 +3,7 @@ USE WAREHOUSE RETAIL_WH;
 
 
 -- =========================================================
--- CUSTOMERS
+-- 1. LOAD CUSTOMERS RECORDS FROM BATCH 1
 -- =========================================================
 
 COPY INTO RAW.CUSTOMERS
@@ -45,7 +45,7 @@ ON_ERROR = 'ABORT_STATEMENT';
 
 
 -- =========================================================
--- SALES
+-- 2. LOAD SALES RECORDS FROM BATCH 1
 -- =========================================================
 
 COPY INTO RAW.SALES
@@ -88,7 +88,7 @@ ON_ERROR = 'ABORT_STATEMENT';
 
 
 -- =========================================================
--- PRODUCTS
+-- 3. LOAD PRODUCTS RECORDS FROM BATCH 1
 -- =========================================================
 
 

@@ -1,7 +1,15 @@
+-- ============================================================
+-- SILVER PRODUCTS
+-- Cleansing + Validation + Rejection + Deduplication + MERGE
+-- ============================================================
 
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 USE SCHEMA SILVER;
 
+-- Change this value for each batch
+--INITIAL/BATCH_01/BATCH_02
+
+SET BATCH_ID = 'BATCH_01'; 
 
 -- ============================================================
 -- 1. CREATE SILVER PRODUCTS TABLE
@@ -69,7 +77,7 @@ WITH CLEANED AS
             'is_active', R.is_active
         ) AS raw_record
 
-    FROM RAW.PRODUCTS R
+    FROM RAW.PRODUCTS R WHERE R._batch_id = $BATCH_ID
 )
 
 SELECT
@@ -145,31 +153,7 @@ AND NOT EXISTS
 
 
 -- ============================================================
--- 4. GLOBAL DEDUPLICATION
--- ============================================================
-
-CREATE OR REPLACE TEMP TABLE PRODUCT_DEDUPLICATED AS
-
-SELECT
-    *,
-
-    ROW_NUMBER() OVER
-    (
-        PARTITION BY product_id
-        ORDER BY
-            updated_at DESC,
-            _loaded_at DESC,
-            _source_file DESC,
-            _row_number DESC
-    ) AS rn
-
-FROM PRODUCT_VALIDATION
-
-WHERE rejection_reason IS NULL;
-
-
--- ============================================================
--- 5. MERGE INTO SILVER PRODUCTS
+-- 4. DEDUPLICATE AND MERGE VALID PRODUCT RECORDS
 -- ============================================================
 
 MERGE INTO SILVER.PRODUCTS T
@@ -189,9 +173,18 @@ USING
         _batch_id,
         _loaded_at
 
-    FROM PRODUCT_DEDUPLICATED
+    FROM PRODUCT_VALIDATION
 
-    WHERE rn = 1
+WHERE rejection_reason IS NULL
+
+QUALIFY ROW_NUMBER() OVER
+    (
+        PARTITION BY product_id
+        ORDER BY
+            updated_at DESC,
+            _loaded_at DESC,
+            _row_number DESC
+    ) =1
 
 ) S
 
@@ -251,7 +244,7 @@ VALUES
 
 
 -- ============================================================
--- 6. VERIFY SILVER PRODUCTS
+-- 5. VERIFY SILVER PRODUCTS
 -- ============================================================
 
 SELECT COUNT(*) AS TOTAL_PRODUCTS
@@ -259,7 +252,7 @@ FROM SILVER.PRODUCTS;
 
 
 -- ============================================================
--- 7. CHECK REJECTED PRODUCTS
+-- 6. CHECK REJECTED PRODUCTS
 -- ============================================================
 
 SELECT
@@ -276,7 +269,7 @@ ORDER BY rejected_count DESC;
 
 
 -- ============================================================
--- 8. CHECK FOR DUPLICATE PRODUCT IDs
+-- 7. CHECK FOR DUPLICATE PRODUCT IDs
 -- ============================================================
 
 SELECT

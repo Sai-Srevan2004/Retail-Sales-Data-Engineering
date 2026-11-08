@@ -28,8 +28,7 @@ CREATE TABLE IF NOT EXISTS GOLD.DIM_PRODUCT (
 -- =========================================================
 -- 2. RESOLVE INFERRED PRODUCT RECORDS
 -- =========================================================
--- If a product was previously created as an inferred member,
--- update that existing row with actual product information.
+-- If a product was previously created as an inferred member, update that existing row with actual product information.
 
 UPDATE GOLD.DIM_PRODUCT T
 SET
@@ -55,8 +54,7 @@ WHERE T.product_id = S.product_id
 -- =========================================================
 -- 3. UPDATE EXISTING PRODUCTS
 -- =========================================================
--- SCD Type 1: Overwrite existing product information.
--- The product_key remains unchanged.
+-- SCD Type 1: Overwrite existing product information. The product_key remains unchanged.
 
 UPDATE GOLD.DIM_PRODUCT T
 SET

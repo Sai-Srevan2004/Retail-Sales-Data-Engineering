@@ -124,32 +124,8 @@ AND NOT EXISTS
       AND R.source_row_number = S._row_number
 );
 
-
 -- ============================================================
--- 4. GLOBAL DEDUPLICATION
--- ============================================================
-
-CREATE OR REPLACE TEMP TABLE STORE_DEDUPLICATED AS
-
-SELECT
-    *,
-
-    ROW_NUMBER() OVER
-    (
-        PARTITION BY store_id
-        ORDER BY
-            _loaded_at DESC NULLS LAST,
-            _source_file DESC,
-            _row_number DESC
-    ) AS rn
-
-FROM STORE_VALIDATION
-
-WHERE rejection_reason IS NULL;
-
-
--- ============================================================
--- 5. MERGE INTO SILVER STORES
+-- 4. DEDUPLICATE AND MERGE VALID CUSTOMER RECORDS
 -- ============================================================
 
 MERGE INTO SILVER.STORES T
@@ -168,9 +144,18 @@ USING
         _batch_id,
         _loaded_at
 
-    FROM STORE_DEDUPLICATED
+    FROM STORE_VALIDATION
 
-    WHERE rn = 1
+    WHERE rejection_reason IS NULL
+
+    QUALIFY ROW_NUMBER() OVER
+    (
+        PARTITION BY store_id
+        ORDER BY
+            _loaded_at DESC NULLS LAST,
+            _source_file DESC,
+            _row_number DESC
+    )=1
 
 ) S
 
@@ -222,7 +207,7 @@ VALUES
 
 
 -- ============================================================
--- 6. VERIFY SILVER STORES
+-- 5. VERIFY SILVER STORES
 -- ============================================================
 
 SELECT COUNT(*) AS TOTAL_STORES
@@ -230,7 +215,7 @@ FROM SILVER.STORES;
 
 
 -- ============================================================
--- 7. CHECK REJECTED STORES
+-- 6. CHECK REJECTED STORES
 -- ============================================================
 
 SELECT
@@ -247,7 +232,7 @@ ORDER BY rejected_count DESC;
 
 
 -- ============================================================
--- 8. CHECK FOR DUPLICATE STORE IDs
+-- 7. CHECK FOR DUPLICATE STORE IDs
 -- ============================================================
 
 SELECT

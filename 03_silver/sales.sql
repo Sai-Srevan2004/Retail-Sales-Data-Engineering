@@ -1,7 +1,15 @@
+-- ============================================================
+-- SILVER PRODUCTS
+-- Cleansing + Validation + Rejection + Deduplication + MERGE
+-- ============================================================
 
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 USE SCHEMA SILVER;
 
+-- Change this value for each batch
+--INITIAL/BATCH_01/BATCH_02
+
+SET BATCH_ID = 'BATCH_01'; 
 
 -- ============================================================
 -- 1. CREATE SILVER SALES TABLE
@@ -79,6 +87,7 @@ WITH CLEANED AS
         ) AS raw_record
 
     FROM RAW.SALES R
+WHERE R._batch_id = $BATCH_ID
 )
 
 SELECT

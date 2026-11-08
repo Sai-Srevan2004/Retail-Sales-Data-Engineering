@@ -1,5 +1,9 @@
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 
+--=================================================================
+--CREATION OF PROCEDURE: LOAD_SILVER_PRODUCTS 
+--=================================================================
+
 CREATE OR REPLACE PROCEDURE SILVER.LOAD_SILVER_PRODUCTS()
 RETURNS STRING
 LANGUAGE SQL

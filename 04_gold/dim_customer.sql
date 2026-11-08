@@ -33,8 +33,7 @@ BEGIN TRANSACTION;
 -- =========================================================
 -- 2. RESOLVE INFERRED CUSTOMER RECORDS
 -- =========================================================
--- Update the existing inferred record instead of inserting
--- a new one. Preserve the existing customer_key.
+-- Update the existing inferred record instead of inserting a new one. Preserve the existing customer_key.
 
 UPDATE GOLD.DIM_CUSTOMER T
 SET
@@ -65,8 +64,7 @@ WHERE T.customer_id = S.customer_id
 -- =========================================================
 -- 3. EXPIRE OLD CUSTOMER VERSIONS
 -- =========================================================
--- If a tracked customer attribute changes, expire the
--- existing version.
+-- If a tracked customer attribute changes, expire the existing version.
 
 UPDATE GOLD.DIM_CUSTOMER T
 SET

@@ -1,7 +1,7 @@
 USE DATABASE RETAIL_SUPPLY_CHAIN;
 
 -- =========================================================
--- SILVER STREAMS
+-- 1. SILVER STREAMS
 -- =========================================================
 
 CREATE STREAM IF NOT EXISTS SILVER.CUSTOMERS_STREAM
@@ -16,6 +16,6 @@ APPEND_ONLY = TRUE;
 
 
 -- =========================================================
--- VALIDATION
+-- 2. VALIDATION
 -- =========================================================
 SHOW STREAMS IN SCHEMA SILVER;

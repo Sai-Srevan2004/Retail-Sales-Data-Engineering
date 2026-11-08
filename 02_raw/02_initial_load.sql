@@ -3,7 +3,7 @@ USE WAREHOUSE RETAIL_WH;
 
 
 -- =========================================================
--- CUSTOMERS
+-- 1. INITIAL LOAD INTO RAW CUSTOMERS TABLE
 -- =========================================================
 
 COPY INTO RAW.CUSTOMERS
@@ -46,7 +46,7 @@ FORCE=TRUE;
 
 
 -- =========================================================
--- PRODUCTS
+-- 2. INITIAL LOAD INTO RAW PRODUCTS TABLE
 -- =========================================================
 
 COPY INTO RAW.PRODUCTS
@@ -88,7 +88,7 @@ FORCE=TRUE;
 
 
 -- =========================================================
--- STORES
+-- 3. INITIAL LOAD INTO RAW STORES TABLE
 -- =========================================================
 
 COPY INTO RAW.STORES
@@ -128,7 +128,7 @@ FORCE=TRUE;
 
 
 -- =========================================================
--- SALES
+-- 4. INITIAL LOAD INTO RAW SALES TABLE
 -- =========================================================
 
 COPY INTO RAW.SALES

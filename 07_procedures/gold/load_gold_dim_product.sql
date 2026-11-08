@@ -1,4 +1,9 @@
+
 USE DATABASE RETAIL_SUPPLY_CHAIN;
+
+--=================================================================
+-- CREATION OF PROCEDURE: LOAD_GOLD_DIM_PRODUCT
+--=================================================================
 
 CREATE OR REPLACE PROCEDURE GOLD.LOAD_GOLD_DIM_PRODUCT()
 RETURNS STRING
@@ -10,18 +15,21 @@ DECLARE
 
 BEGIN
 
-    -- Create temporary tables before transaction
-    CREATE OR REPLACE TEMPORARY TABLE PRODUCT_BATCH
-    LIKE SILVER.PRODUCTS;
+    --=============================================================
+    -- 1. CREATE TEMPORARY TABLE
+    --=============================================================
 
-    CREATE OR REPLACE TEMPORARY TABLE PRODUCT_DEDUPLICATED
+    CREATE OR REPLACE TEMPORARY TABLE PRODUCT_BATCH
     LIKE SILVER.PRODUCTS;
 
 
     BEGIN TRANSACTION;
 
 
-    -- 1. Capture incoming product changes
+    --=============================================================
+    -- 2. CAPTURE STREAM DATA
+    --=============================================================
+
     INSERT INTO PRODUCT_BATCH
     SELECT
         product_id,
@@ -35,28 +43,34 @@ BEGIN
         _source_file,
         _batch_id,
         _loaded_at
+
     FROM SILVER.PRODUCTS_STREAM
+
     WHERE METADATA$ACTION = 'INSERT';
 
 
-    -- 2. Deduplicate incoming products
-    INSERT INTO PRODUCT_DEDUPLICATED
-    SELECT *
-    FROM PRODUCT_BATCH
+    --=============================================================
+    -- 3. UPDATE EXISTING PRODUCTS / INSERT NEW PRODUCTS
+    --=============================================================
+    -- SCD Type 1: Maintain only the latest product information.
+    -- Inferred products are resolved without changing product_key.
 
-    QUALIFY ROW_NUMBER() OVER
-    (
-        PARTITION BY product_id
-        ORDER BY updated_at DESC, _loaded_at DESC
-    ) = 1;
-
-
-    -- 3. Update existing products and insert new products
     MERGE INTO GOLD.DIM_PRODUCT T
 
-    USING PRODUCT_DEDUPLICATED S
+    USING (
+        SELECT *
+        FROM PRODUCT_BATCH
+
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY product_id
+            ORDER BY updated_at DESC, _loaded_at DESC
+        ) = 1
+    ) S
 
     ON T.product_id = S.product_id
+
+
+    -- Resolve inferred products
 
     WHEN MATCHED AND T.is_inferred = TRUE
 
@@ -72,6 +86,9 @@ BEGIN
         T._source_file = S._source_file,
         T._batch_id = S._batch_id,
         T._loaded_at = S._loaded_at
+
+
+    -- Update existing products when incoming data is newer
 
     WHEN MATCHED AND
     (
@@ -93,6 +110,9 @@ BEGIN
         T._source_file = S._source_file,
         T._batch_id = S._batch_id,
         T._loaded_at = S._loaded_at
+
+
+    -- Insert new products
 
     WHEN NOT MATCHED THEN INSERT
     (
@@ -127,6 +147,10 @@ BEGIN
     );
 
 
+    --=============================================================
+    -- 4. CAPTURE PROCESSED ROW COUNT
+    --=============================================================
+
     SELECT COUNT(*)
     INTO :rows_processed
     FROM PRODUCT_BATCH;
@@ -134,11 +158,13 @@ BEGIN
 
     COMMIT;
 
+
     RETURN 'Gold product processing completed. Records captured: '
            || TO_VARCHAR(rows_processed);
 
 
 EXCEPTION
+
     WHEN OTHER THEN
         ROLLBACK;
         RAISE;

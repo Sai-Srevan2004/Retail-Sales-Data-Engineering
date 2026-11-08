@@ -3,7 +3,7 @@ USE SCHEMA RAW;
 
 
 -- =========================================================
--- RAW.CUSTOMERS
+-- 1. CREATION OF RAW CUSTOMERS TABLE
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS CUSTOMERS (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS CUSTOMERS (
 
 
 -- =========================================================
--- RAW.PRODUCTS
+-- 2. CREATION OF RAW PRODUCTS TABLE
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS PRODUCTS (
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS PRODUCTS (
 
 
 -- =========================================================
--- RAW.STORES
+-- 3. CREATION OF RAW STORES TABLE
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS STORES (
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS STORES (
 
 
 -- =========================================================
--- RAW.SALES
+-- 4. CREATION OF RAW SALES TABLE
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS SALES (
