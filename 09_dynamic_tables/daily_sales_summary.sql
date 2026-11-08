@@ -1,19 +1,56 @@
+
+--========================================================
+-- 1. SETUP
+--========================================================
 USE DATABASE RETAIL_SUPPLY_CHAIN;
+USE SCHEMA GOLD;
 
--- TARGET_LAG is a freshness target, not a guaranteed refresh interval.
+
+--========================================================
+-- 2. CREATE DAILY SALES SUMMARY DYNAMIC TABLE
+--========================================================
+
 CREATE OR REPLACE DYNAMIC TABLE GOLD.DAILY_SALES_SUMMARY
-  TARGET_LAG = '5 minutes'
-  WAREHOUSE = RETAIL_WH
-  REFRESH_MODE = INCREMENTAL
-AS
-SELECT
-  sale_timestamp::DATE AS sale_date,
-  COUNT(DISTINCT sale_id) AS total_orders,
-  SUM(quantity) AS total_quantity,
-  SUM(gross_amount) AS gross_sales,
-  SUM(discount_amount) AS discount_amount,
-  SUM(net_amount) AS net_sales
-FROM GOLD.FACT_SALES
-GROUP BY sale_timestamp::DATE;
 
-SHOW DYNAMIC TABLES LIKE 'DAILY_SALES_SUMMARY';
+    TARGET_LAG = '1 HOUR'
+    WAREHOUSE = RETAIL_WH
+
+AS
+
+SELECT
+    DATE_KEY,
+    STORE_KEY,
+
+    COUNT(DISTINCT SALE_ID) AS TOTAL_ORDERS,
+
+    SUM(QUANTITY) AS TOTAL_UNITS_SOLD,
+
+    SUM(GROSS_AMOUNT) AS TOTAL_GROSS_SALES,
+
+    SUM(DISCOUNT_AMOUNT) AS TOTAL_DISCOUNTS,
+
+    SUM(NET_AMOUNT) AS TOTAL_NET_SALES,
+
+    AVG(NET_AMOUNT) AS AVG_ORDER_VALUE
+
+FROM GOLD.FACT_SALES
+
+GROUP BY
+    DATE_KEY,
+    STORE_KEY;
+
+
+--========================================================
+-- 3. VERIFY DYNAMIC TABLE
+--========================================================
+
+SELECT *
+FROM GOLD.DAILY_SALES_SUMMARY
+ORDER BY DATE_KEY, STORE_KEY;
+
+
+--========================================================
+-- 4. CHECK DYNAMIC TABLE DETAILS
+--========================================================
+
+SHOW DYNAMIC TABLES IN SCHEMA GOLD;
